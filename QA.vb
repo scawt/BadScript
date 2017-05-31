@@ -251,7 +251,7 @@ Private Sub CommandButton1_Click()
         intCount = intCount + 1
     Loop
                 
-    ' Write to stats sheet
+       ' Write to stats sheet
     ThisWorkbook.Sheets("Stats").Range("B1").Value = PCRTotal
     ThisWorkbook.Sheets("Stats").Range("B2").Value = PCRClosed
     If PCRTotal = 0 Then
@@ -259,6 +259,16 @@ Private Sub CommandButton1_Click()
     Else
         ThisWorkbook.Sheets("Stats").Range("B3").Value = Int((PCRClosed / PCRTotal) * 100) & "%"
     End If
+    
+    ThisWorkbook.Sheets("Stats").Range("E1").Value = AIMSTotalChecked
+    ThisWorkbook.Sheets("Stats").Range("E2").Value = AIMSNoMatch
+    ThisWorkbook.Sheets("Stats").Range("E3").Value = AIMSMissing
+    If AIMSTotalChecked = 0 Then
+        ThisWorkbook.Sheets("Stats").Range("E4").Value = "No Data"
+    Else
+        ThisWorkbook.Sheets("Stats").Range("E4").Value = Int((AIMSNoMatch / AIMSTotalChecked) * 100) & "%"
+    End If
+                
 
 End Sub
 
