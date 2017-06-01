@@ -25,6 +25,7 @@
 
 Private Sub CommandButton1_Click()
 'clear sheet
+    
     With Sheets("Solutions")
         .Rows("4:" & .Rows.Count).Value = ""
     End With
@@ -97,6 +98,7 @@ Private Sub CommandButton1_Click()
 
 'Patient Data
     Dim strOCRAMRN As String
+    Dim strOCRAMRNNoZero As String
     Dim strAIMSMRN As String
 
 'Misc Variables
@@ -114,13 +116,19 @@ Private Sub CommandButton1_Click()
     'Read PCR report (OCRA)
     Do While (ThisWorkbook.Sheets("OCRA").Range("A" & (intCount)).Value) <> ""
         strOCRAMRN = ThisWorkbook.Sheets("OCRA").Range("B" & intCount).Value
+        strOCRAMRNNoZero = ThisWorkbook.Sheets("OCRA").Range("B" & intCount).Value
         strOCRANAME = ThisWorkbook.Sheets("OCRA").Range("D" & intCount).Value
         'PCR closure stuff for stats and review sheets
         PCRTotal = PCRTotal + 1
         If ThisWorkbook.Sheets("OCRA").Range("R" & intCount).Value = 0 Then
             PCRClosed = PCRClosed + 1
         Else
-            If ThisWorkbook.Sheets("Review").Range("B" & intReviewOutput).Value <> strOCRAMRN Then
+            'peel off leading zeroes
+            Do While Left(strOCRAMRNNoZero, 1) = "0"
+                strOCRAMRNNoZero = Mid(strOCRAMRNNoZero, 2)
+            Loop
+            
+            If ThisWorkbook.Sheets("Review").Range("B" & intReviewOutput).Value <> strOCRAMRNNoZero Then
                 intReviewOutput = intReviewOutput + 1
             End If
             ThisWorkbook.Sheets("Review").Range("B" & intReviewOutput).Value = ThisWorkbook.Sheets("OCRA").Range("B" & intCount).Value
@@ -288,7 +296,7 @@ Private Sub CommandButton1_Click()
             Range("M" & intCount).Value = AIMSRemi
         End If
         If AIMSMorphine <> 0 Then
-            Range("M" & intCount).Value = AIMSMorphine
+            Range("O" & intCount).Value = AIMSMorphine
         End If
         
         If Range("Q" & intCount).Value = "" Then
@@ -350,7 +358,13 @@ Private Sub CommandButton1_Click()
     Else
         ThisWorkbook.Sheets("Stats").Range("E4").Value = Int((AIMSNoMatch / AIMSTotalChecked) * 100) & "%"
     End If
-            
+                
+
+        
+        
+
+        
+
 End Sub
 
 
