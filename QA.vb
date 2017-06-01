@@ -2,8 +2,8 @@
 ' An Excel Macro to read and interpret narcotic dispensing data from Omnicell PCR reports, and compare it to AIMS anesthesia records.
 ' Both programs write out data in a spreadsheet that I would conservatively describe as "whack," so I built a workbook to read them
 ' for me. Omnicell report goes in a sheet named "Ocra," AIMS report goes in a sheet named "Aims," Button and grid go on a "Solutions"
-' sheet, and Metadata gets written to a "Stats" sheet. I'd just upload the file, but there's patient data in there and that's an actual
-' crime.
+' sheet, incomplete PCRs and issues on the "Solutions" sheet are written to the "Review" sheet, and Metadata gets written to a "Stats" 
+' sheet. I'd just upload the file, but there's patient data in there and that's an actual crime.
 '
 '
 ' Kind of a niche project TBH 
@@ -17,17 +17,25 @@
 '      b: excel literally is a data matrix software. Why fight it, you know?)
 '   4) Nested Do/Loops. This is where it gets kind of ugly - Loop through the solutions sheet, reading in MRN. For each line,
 '      Loop through the entire AIMS sheet looking for a match. When found, check drug name to exclude non-narcotics. Write
-'      matches to the solutions sheet
+'       matches to the sheet
 '   5) The easy part: Compare data within the 'Solutions' sheet, write desired results.
-'   6) Metadata: In progress, gotta get a list of stuff to present
+'   6) Metadata: analysis of data is pulled together as that data is handled. For example, PCR completeness checks are run as
+'      the OCRA sheet is read the first time, but matches and percentages are pulled after AIMS has been read
 
 
 Private Sub CommandButton1_Click()
 'clear sheet
     With Sheets("Solutions")
-        .Rows("4:" & .Rows.Count).Delete
+        .Rows("4:" & .Rows.Count).Value = ""
     End With
-    ThisWorkbook.Sheets("Stats").Range("B1:B10").Value = ""
+    
+    With Sheets("Review")
+        .Rows("3:" & .Rows.Count).Value = ""
+    End With
+    
+    ThisWorkbook.Sheets("Stats").Range("B2:B10").Value = ""
+    ThisWorkbook.Sheets("Stats").Range("E2:E10").Value = ""
+    
     
 'Drug Admin Variables
     Dim strDrugNameOCRA As String
@@ -67,6 +75,10 @@ Private Sub CommandButton1_Click()
     Dim PCRTotal As Long
     Dim PCRClosed As Long
     Dim PCRPercent As Single
+    Dim AIMSTotalChecked As Integer
+    Dim AIMSMissing As Integer
+    Dim AIMSNoMatch As Integer
+    Dim AIMSPercent As Single
     
 'Incrementation stuff
     Dim intCount As Integer
@@ -76,28 +88,51 @@ Private Sub CommandButton1_Click()
     Dim strCurrentOCRAName As String
     strCurrentOCRAName = "false"
     strCurrentOCRAMRN = "false"
+    Dim strCurrentAIMSMRN As String
+    Dim strCurrentAIMSName As String
+    strCurrentAIMSName = "false"
+    strCurrentAIMSMRN = "false"
+    Dim intReviewOutput As Integer
+    intReviewOutput = 2     'Will start writing to 3, but need to check previous rows whenever we right for duplicate data
 
 'Patient Data
     Dim strOCRAMRN As String
     Dim strAIMSMRN As String
 
+'Misc Variables
+    Dim strOCRADate As String
+    
     
     PCRTotal = 0
     PCRClosed = 0
+    AIMSTotalChecked = 0
+    AIMSMissing = 0
+    AIMSNoMatch = 0
     intCount = 2        'start reading OCRA on the first data row, skipping labels
     intOutput = 4       'start writing on the first empty row, skipping button/labels
     
     'Read PCR report (OCRA)
     Do While (ThisWorkbook.Sheets("OCRA").Range("A" & (intCount)).Value) <> ""
-        'PCR closure stuff for stats sheet
+        strOCRAMRN = ThisWorkbook.Sheets("OCRA").Range("B" & intCount).Value
+        strOCRANAME = ThisWorkbook.Sheets("OCRA").Range("D" & intCount).Value
+        'PCR closure stuff for stats and review sheets
         PCRTotal = PCRTotal + 1
         If ThisWorkbook.Sheets("OCRA").Range("R" & intCount).Value = 0 Then
             PCRClosed = PCRClosed + 1
+        Else
+            If ThisWorkbook.Sheets("Review").Range("B" & intReviewOutput).Value <> strOCRAMRN Then
+                intReviewOutput = intReviewOutput + 1
+            End If
+            ThisWorkbook.Sheets("Review").Range("B" & intReviewOutput).Value = ThisWorkbook.Sheets("OCRA").Range("B" & intCount).Value
+            ThisWorkbook.Sheets("Review").Range("A" & intReviewOutput).Value = ThisWorkbook.Sheets("OCRA").Range("D" & intCount).Value
+            ThisWorkbook.Sheets("Review").Range("C" & intReviewOutput).Value = ThisWorkbook.Sheets("OCRA").Range("AD" & intCount).Value
+            strOCRADate = Left(ThisWorkbook.Sheets("OCRA").Range("A" & intCount).Value, 8)
+            ThisWorkbook.Sheets("Review").Range("D" & intReviewOutput).Value = Mid(strOCRADate, 5, 2) & "/" & Right(strOCRADate, 2) & "/" & Left(strOCRADate, 4)
+            ThisWorkbook.Sheets("Review").Range("E" & intReviewOutput).Value = "PCR Not Closed"
         End If
-        'Patient identifiers and transaction info
+        'Pull foundational data from OCRA, write to form
         If ThisWorkbook.Sheets("OCRA").Range("AN" & intCount).Value = "W" And Left(ThisWorkbook.Sheets("OCRA").Range("AE" & intCount).Value, 7) <> "BIW_PRO" Then
-            strOCRAMRN = ThisWorkbook.Sheets("OCRA").Range("B" & intCount).Value
-            strOCRANAME = ThisWorkbook.Sheets("OCRA").Range("D" & intCount).Value
+
         
                 If strCurrentOCRAMRN = "false" Then
                     strCurrentOCRAMRN = strOCRAMRN
@@ -212,46 +247,93 @@ Private Sub CommandButton1_Click()
         Do While (ThisWorkbook.Sheets("AIMS").Range("A" & intSubCount).Value) <> ""
             If strOCRAMRN = ThisWorkbook.Sheets("AIMS").Range("C" & intSubCount).Value Then
                 strDrugNameAIMS = ThisWorkbook.Sheets("AIMS").Range("L" & intSubCount).Value
-                Select Case Left(strDrugNameAIMS, 7) 'read only first 7 characters to ignore special routes of admin i.e. "morphine - spinal"
+                Select Case Left(strDrugNameAIMS, 7)
                     Case "Fentany"
-                        Range("C" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSFent = AIMSFent + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                     Case "Hydromo"
-                        Range("E" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSHydro = AIMSHydro + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                     Case "Midazol"
-                        Range("G" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSMidaz = AIMSMidaz + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                     Case "Ketamin"
-                        Range("I" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSKetamine = AIMSKetamine + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                     Case "Methohe"
-                        Range("K" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSMethohex = AIMSMethohex + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                     Case "Remifen"
-                        Range("M" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSRemi = AIMSRemi + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                     Case "Morphin"
-                        Range("O" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
+                        AIMSMorphine = AIMSMorphine + ThisWorkbook.Sheets("AIMS").Range("M" & intSubCount).Value
                 End Select
                 Range("Q" & intCount).Value = ThisWorkbook.Sheets("AIMS").Range("B" & intSubCount).Value
             End If
             intSubCount = intSubCount + 1
-            If Range("Q" & intCount).Value = "" Then
-                Range("Q" & intCount).Value = "No AIMS Data"
-            End If
+
         Loop
+        'Write comparison data
+        If AIMSFent <> 0 Then
+            Range("C" & intCount).Value = AIMSFent
+        End If
+        If AIMSHydro <> 0 Then
+            Range("E" & intCount).Value = AIMSHydro
+        End If
+        If AIMSMidaz <> 0 Then
+            Range("G" & intCount).Value = AIMSMidaz
+        End If
+        If AIMSKetamine <> 0 Then
+            Range("I" & intCount).Value = AIMSKetamine
+        End If
+        If AIMSMethohex <> 0 Then
+            Range("K" & intCount).Value = AIMSMethohex
+        End If
+        If AIMSRemi <> 0 Then
+            Range("M" & intCount).Value = AIMSRemi
+        End If
+        If AIMSMorphine <> 0 Then
+            Range("M" & intCount).Value = AIMSMorphine
+        End If
+        
+        If Range("Q" & intCount).Value = "" Then
+            Range("Q" & intCount).Value = "No AIMS Data"
+            AIMSMissing = AIMSMissing + 1
+        End If
+        
+        'reset for next loop
+        AIMSFent = 0
+        AIMSHydro = 0
+        AIMSMidaz = 0
+        AIMSKetamine = 0
+        AIMSMethohex = 0
+        AIMSRemi = 0
+        AIMSMorphine = 0
         intCount = intCount + 1
         intSubCount = 2
     Loop
-    'Read Solutions sheet, look for mismatched AIMS/OCRA Data
+    'Read output sheet, look for mismatched AIMS/OCRA Data
     intCount = 4
     Do While Range("A" & intCount).Value <> ""
+        AIMSTotalChecked = AIMSTotalChecked + 1
         If Range("C" & intCount).Value = Range("D" & intCount).Value And Range("E" & intCount).Value = Range("F" & intCount).Value And Range("G" & intCount).Value = Range("H" & intCount).Value And Range("I" & intCount).Value = Range("J" & intCount).Value And Range("K" & intCount).Value = Range("L" & intCount).Value And Range("M" & intCount).Value = Range("N" & intCount).Value And Range("O" & intCount).Value = Range("P" & intCount).Value Then
             Range("R" & intCount).Value = "Yes"
             Range("R" & intCount).Interior.Color = RGB(100, 200, 100)
         Else
             Range("R" & intCount).Value = "No"
             Range("R" & intCount).Interior.Color = RGB(200, 100, 100)
+            AIMSNoMatch = AIMSNoMatch + 1
+            
+            intReviewOutput = intReviewOutput + 1
+            ThisWorkbook.Sheets("Review").Range("B" & intReviewOutput).Value = Range("B" & intCount).Value
+            ThisWorkbook.Sheets("Review").Range("A" & intReviewOutput).Value = Range("A" & intCount).Value
+            ThisWorkbook.Sheets("Review").Range("C" & intReviewOutput).Value = Range("S" & intCount).Value
+            ThisWorkbook.Sheets("Review").Range("D" & intReviewOutput).Value = Range("Q" & intCount).Value
+            If Range("Q" & intCount).Value = "No AIMS Data" Then
+                ThisWorkbook.Sheets("Review").Range("E" & intReviewOutput).Value = "No AIMS Record Found"
+            Else
+                ThisWorkbook.Sheets("Review").Range("E" & intReviewOutput).Value = "AIMS and PCR Do Not Match"
+            End If
         End If
         intCount = intCount + 1
     Loop
                 
-       ' Write to stats sheet
+    ' Write to stats sheet
     ThisWorkbook.Sheets("Stats").Range("B1").Value = PCRTotal
     ThisWorkbook.Sheets("Stats").Range("B2").Value = PCRClosed
     If PCRTotal = 0 Then
@@ -268,8 +350,9 @@ Private Sub CommandButton1_Click()
     Else
         ThisWorkbook.Sheets("Stats").Range("E4").Value = Int((AIMSNoMatch / AIMSTotalChecked) * 100) & "%"
     End If
-                
-
+            
 End Sub
+
+
 
 
