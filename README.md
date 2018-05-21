@@ -1,2 +1,1 @@
-# BadScript
-I put the scripts I do in here. They are generally bad.
+A utility to read in narcotic transaction records from AIMS and OCRA, then compare and reconcile those records and highlight discrepancies.
